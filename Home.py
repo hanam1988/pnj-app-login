@@ -4,21 +4,14 @@ from datetime import datetime, timedelta
 from modules.auth import verify_login, logout
 
 # ==========================================
-# CẤU HÌNH TRANG STREAMLIT
+# CẤU HÌNH TRANG STREAMLIT (Ẩn thanh sidebar)
 # ==========================================
 st.set_page_config(
     page_title="PNJ - Hệ Thống Thu Đổi Chuyển Đổi",
     page_icon="💎",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="collapsed"
 )
-
-# Kết nối Supabase an toàn (tùy chọn)
-try:
-    from supabase import create_client, Client
-    HAS_SUPABASE_LIB = True
-except ImportError:
-    HAS_SUPABASE_LIB = False
 
 # ==========================================
 # KHỞI TẠO SESSION STATE
@@ -38,10 +31,18 @@ if 'next_new_id' not in st.session_state:
     st.session_state.next_new_id = 2
 
 # ==========================================
-# CUSTOM CSS PHONG CÁCH PNJ
+# CUSTOM CSS PHONG CÁCH PNJ & ẨN SIDEBAR
 # ==========================================
 st.markdown("""
 <style>
+    /* Ẩn hoàn toàn thanh Sidebar bên trái và nút toggle của Streamlit */
+    [data-testid="stSidebar"], section[data-testid="stSidebar"] {
+        display: none !important;
+    }
+    [data-testid="collapsedControl"] {
+        display: none !important;
+    }
+
     .main-header {
         background-color: #003468;
         padding: 18px 25px;
@@ -65,10 +66,10 @@ st.markdown("""
         background: rgba(255, 255, 255, 0.15);
         border: 1px solid #C5A059;
         border-radius: 6px;
-        padding: 8px 12px;
-        margin-top: 10px;
-        display: inline-block;
+        padding: 8px 14px;
+        color: white;
         font-size: 13px;
+        line-height: 1.5;
     }
     .card-pa {
         padding: 18px;
@@ -82,6 +83,22 @@ st.markdown("""
     .pa3-bg { background-color: #dc3545; }
     .del-btn-container { margin-top: 28px; }
     
+    .guide-box {
+        background-color: #f8f9fa;
+        border-left: 5px solid #003468;
+        padding: 15px;
+        border-radius: 4px;
+        margin-bottom: 15px;
+    }
+    .step-number {
+        background-color: #003468;
+        color: #F7D070;
+        font-weight: bold;
+        padding: 4px 10px;
+        border-radius: 50%;
+        margin-right: 8px;
+    }
+
     .stTabs [data-baseweb="tab-list"] { gap: 8px; }
     .stTabs [data-baseweb="tab"] {
         height: 48px;
@@ -102,7 +119,7 @@ st.markdown("""
 # ==========================================
 if not st.session_state.is_authenticated:
     st.markdown("""
-    <div style='text-align: center; margin-top: 40px; margin-bottom: 25px;'>
+    <div style='text-align: center; margin-top: 50px; margin-bottom: 25px;'>
         <h1 style='color: #003468; margin-bottom: 5px;'>💎 PNJ RETAIL SYSTEM</h1>
         <h3 style='color: #856404; font-weight: 500;'>HỆ THỐNG XÁC THỰC & TRA CỨU CHÍNH SÁCH THU ĐỔI</h3>
     </div>
@@ -136,56 +153,28 @@ if not st.session_state.is_authenticated:
 # TRƯỜNG HỢP 2: ĐÃ ĐĂNG NHẬP ➔ GIAO DIỆN HOME CHÍNH
 # ==========================================
 user = st.session_state.current_user
+store_code = str(user.get("macuahang", "HUB-001"))
 
-# Header chứa đầy đủ Thông Tin Người Dùng từ SharePoint
-st.markdown(f"""
-<div class="main-header">
-    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
-        <div>
-            <h1>💎 PNJ - HỆ THỐNG TRA CỨU & HƯỚNG DẪN THU ĐỔI CHUYỂN ĐỔI</h1>
-            <p>Áp dụng theo QĐ 442-2026-TB-P.VHBL-TĐTGTTHML-PNJ & PL A2 (Hiệu lực từ 30/09/2026)</p>
-        </div>
-        <div class="user-badge">
-            👤 <b>{user.get('fullname', 'Nhân viên')}</b> | {user.get('chucdanh', 'Tư vấn viên')} <br>
-            🏬 Cửa hàng: <b>{user.get('macuahang', 'HUB-001')}</b> | User: <code>{user.get('username', '')}</code>
-        </div>
+# Header hiển thị đầy đủ thông tin Người Dùng & Nút Đăng Xuất trực tiếp
+col_head1, col_head2 = st.columns([7.8, 2.2])
+with col_head1:
+    st.markdown(f"""
+    <div class="main-header">
+        <h1>💎 PNJ - HỆ THỐNG TRA CỨU & HƯỚNG DẪN THU ĐỔI CHUYỂN ĐỔI</h1>
+        <p>Áp dụng theo QĐ 442-2026-TB-P.VHBL-TĐTGTTHML-PNJ & PL A2 (Hiệu lực từ 30/09/2026)</p>
     </div>
-</div>
-""", unsafe_allow_html=True)
+    """, unsafe_allow_html=True)
 
-# Sidebar: Cấu hình Supabase & Nút Đăng Xuất
-st.sidebar.markdown(f"### 👤 Tài Khoản: **{user.get('fullname', '')}**")
-st.sidebar.caption(f"Cửa hàng: **{user.get('macuahang', '')}** ({user.get('chucdanh', '')})")
-
-if st.sidebar.button("🚪 Đăng Xuất", use_container_width=True):
-    logout()
-
-st.sidebar.markdown("---")
-st.sidebar.title("🔌 Cấu Hình CSDL Supabase")
-
-# Đọc Supabase URL an toàn
-def clean_supabase_url(raw_url: str) -> str:
-    if not raw_url: return ""
-    u = raw_url.strip().rstrip("/")
-    if u.endswith("/rest/v1"): u = u[:-8].rstrip("/")
-    return u
-
-default_url = st.secrets.get("SUPABASE_URL", "") if hasattr(st, "secrets") else ""
-default_key = st.secrets.get("SUPABASE_KEY", "") if hasattr(st, "secrets") else ""
-
-sb_url = st.sidebar.text_input("Supabase URL:", value=default_url)
-sb_key = st.sidebar.text_input("Supabase API Key:", value=default_key, type="password")
-
-# Tự động gán Mã Cửa Hàng từ thông tin người dùng đăng nhập
-store_code = st.sidebar.text_input("Mã Cửa Hàng (HUB):", value=str(user.get("macuahang", "HUB-001")))
-
-supabase_client = None
-if HAS_SUPABASE_LIB and sb_url.strip() and sb_key.strip():
-    try:
-        supabase_client = create_client(clean_supabase_url(sb_url), sb_key.strip())
-        st.sidebar.success("✅ Đã kết nối Supabase!")
-    except Exception as e:
-        st.sidebar.error(f"❌ Lỗi kết nối Supabase: {e}")
+with col_head2:
+    st.markdown(f"""
+    <div class="user-badge">
+        👤 <b>{user.get('fullname', 'Nhân viên')}</b><br>
+        💼 {user.get('chucdanh', 'Tư vấn viên')} | 🏬 Cửa hàng: <b>{store_code}</b>
+    </div>
+    """, unsafe_allow_html=True)
+    st.write("")
+    if st.button("🚪 Đăng Xuất", use_container_width=True, type="secondary"):
+        logout()
 
 # ==========================================
 # DỮ LIỆU MA TRẬN NHÓM HÀNG PNJ (N1 - N10)
@@ -204,14 +193,13 @@ GROUPS_INFO = {
 }
 
 # ==========================================
-# KHỞI TẠO 5 TABS GIAO DIỆN
+# KHỞI TẠO CÁC TABS GIAO DIỆN CHÍNH
 # ==========================================
-tab_calculator, tab_user_guide, tab_matrix, tab_faq, tab_database = st.tabs([
-    "📋 1. TÍNH TOÁN CẤN TRỪ & PHƯƠNG ÁN",
-    "📖 2. HƯỚNG DẪN QUY TRÌNH THU ĐỔI",
-    "📊 3. MA TRẬN MAPPING & LỘ TRÌNH",
-    "❓ 4. HỎI ĐÁP Q&A THƯỜNG GẶP",
-    "🗄️ 5. QUẢN LÝ DỮ LIỆU SUPABASE"
+tab_calculator, tab_user_guide, tab_matrix, tab_faq = st.tabs([
+    "📋 1. TÍNH TOÁN CẤN TRỪ & PHƯƠNG ÁN THANH TOÁN",
+    "📖 2. HƯỚNG DẪN QUY TRÌNH THU ĐỔI (DÀNH CHO KHÁCH & NV)",
+    "📊 3. MA TRẬN MAPPING & LỘ TRÌNH THANH TOÁN",
+    "❓ 4. HỎI ĐÁP Q&A THƯỜNG GẶP"
 ])
 
 # ==========================================
@@ -438,29 +426,22 @@ with tab_calculator:
                 for du in du_item_list:
                     st.write(f"• **{du['id']}** (N{du['group'][1:]}): Dư **{du['amount']:,.0f} VNĐ** ➔ Lộ trình **{du['payment']}** ({du['schedule']})")
 
-        # Nút Lưu Dữ Liệu vào Supabase
+        # Kịch bản tư vấn chuẩn
         st.markdown("---")
-        if st.button("💾 LƯU GIAO DỊCH VÀO SUPABASE", type="primary"):
-            if supabase_client:
-                try:
-                    record_data = {
-                        "ma_cua_hang": store_code,
-                        "so_dien_thoai_kh": customer_phone,
-                        "phuong_an": pa_code,
-                        "tong_hang_cu": float(total_old_val),
-                        "tong_hang_moi": float(total_new_val),
-                        "tien_can_tru": float(total_can_tru),
-                        "tien_chi_sau": float(total_chi_sau),
-                        "chi_tiet_cu": old_items_processed,
-                        "chi_tiet_moi": new_items_processed
-                    }
-                    res = supabase_client.table("giao_dich_thu_doi").insert(record_data).execute()
-                    st.success("🎉 Đã lưu thành công giao dịch vào CSDL Supabase!")
-                except Exception as err:
-                    st.error(f"❌ Lỗi từ Supabase: {err}")
-                    st.info("💡 MẸO: Hãy kiểm tra URL xem có bị thừa '/rest/v1' hay dấu '/' ở cuối không, và đảm bảo bảng đã tắt RLS trong SQL Editor.")
-            else:
-                st.error("⚠️ Chưa kết nối Supabase! Vui lòng kiểm tra Supabase URL và Key ở thanh SideBar bên trái.")
+        st.markdown("### 🗣️ KỊCH BẢN TƯ VẤN MẪU CHO NHÂN VIÊN (ĐỌC CHO KHÁCH HÀNG)")
+        today_str = datetime.now().strftime("%d/%m/%Y")
+        if pa_code == "PA1":
+            script_text = f"“Dạ em chào Anh/Chị, tổng giá trị các món cũ của Anh/Chị là {total_old_val:,.0f}đ đã được cấn trừ 100% thẳng vào hóa đơn mua hàng mới trị giá {total_new_val:,.0f}đ. Anh/Chị chỉ cần thanh toán phần chênh lệch còn lại là {max(0, total_new_val - total_old_val):,.0f}đ ạ.”"
+        elif pa_code == "PA2":
+            max_payment_term = "T+7"
+            if any(d['payment'] == 'T+120' for d in du_item_list):
+                max_payment_term = "T+120"
+            elif any(d['payment'] == 'T+2' for d in du_item_list):
+                max_payment_term = "T+2"
+            script_text = f"“Dạ em chào Anh/Chị, tổng giá trị món cũ của Anh/Chị là {total_old_val:,.0f}đ. Em đã hỗ trợ cấn trừ {total_can_tru:,.0f}đ trực tiếp vào hóa đơn mới. Số tiền dư còn lại là {total_chi_sau:,.0f}đ, PNJ sẽ chuyển khoản chi trả lại cho Anh/Chị theo đúng lộ trình cam kết ({max_payment_term}) tính từ ngày hôm nay {today_str} ạ.”"
+        else:
+            script_text = f"“Dạ em chào Anh/Chị, giao dịch bán lại sản phẩm của Anh/Chị có tổng trị giá là {total_old_val:,.0f}đ. PNJ tiếp nhận giao dịch và sẽ chuyển khoản thanh toán cho Anh/Chị theo đúng lộ trình quy định của công ty từ 15h00-17h00 hàng ngày ạ.”"
+        st.info(script_text)
 
 # ==========================================
 # TAB 2: HƯỚNG DẪN QUY TRÌNH THU ĐỔI
@@ -468,6 +449,37 @@ with tab_calculator:
 with tab_user_guide:
     st.subheader("📖 Hướng Dẫn Chi Tiết Quy Trình Thu Đổi & Mua Lại Sản Phẩm PNJ")
     st.write("Tài liệu hướng dẫn trực quan dành cho Khách hàng và Nhân viên tư vấn bán hàng toàn hệ thống PNJ.")
+    
+    st.markdown("---")
+    st.markdown("## 📍 1. Hiểu Rõ 3 Phương Án Thu Đổi & Thanh Toán")
+    c_p1, c_p2, c_p3 = st.columns(3)
+    with c_p1:
+        st.markdown("""
+        <div style="background-color:#e8f5e9; border:2px solid #28a745; padding:15px; border-radius:8px; height:100%;">
+            <h4 style="color:#28a745; margin-top:0;">🟢 PA1: ĐỔI HOÀN TOÀN</h4>
+            <p><b>Điều kiện:</b> Món mới ≥ Món cũ & thỏa ma trận mapping nhóm hàng.</p>
+            <p><b>Quyền lợi:</b> Cấn trừ 100% giá trị món cũ vào hóa đơn mới.</p>
+            <p><b>Nơi thực hiện:</b> Áp dụng tại <b>TẤT CẢ các cửa hàng PNJ</b> toàn quốc.</p>
+        </div>
+        """, unsafe_allow_html=True)
+    with c_p2:
+        st.markdown("""
+        <div style="background-color:#fff3cd; border:2px solid #ffc107; padding:15px; border-radius:8px; height:100%;">
+            <h4 style="color:#856404; margin-top:0;">🟡 PA2: ĐỔI MỘT PHẦN</h4>
+            <p><b>Điều kiện:</b> Món mới < Món cũ (dư tiền thừa).</p>
+            <p><b>Quyền lợi:</b> Cấn trừ món mới, tiền thừa PNJ chuyển khoản chi trả theo lộ trình.</p>
+            <p><b>Nơi thực hiện:</b> <b>BẮT BUỘC thực hiện tại Cửa hàng HUB</b>.</p>
+        </div>
+        """, unsafe_allow_html=True)
+    with c_p3:
+        st.markdown("""
+        <div style="background-color:#f8d7da; border:2px solid #dc3545; padding:15px; border-radius:8px; height:100%;">
+            <h4 style="color:#721c24; margin-top:0;">🔴 PA3: MUA LẠI HOÀN TOÀN</h4>
+            <p><b>Điều kiện:</b> Bán lại sản phẩm, không mua món mới.</p>
+            <p><b>Quyền lợi:</b> Nhận 100% tiền mua lại qua tài khoản ngân hàng theo lộ trình.</p>
+            <p><b>Nơi thực hiện:</b> <b>BẮT BUỘC tại Cửa hàng HUB</b> (Khung giờ: 15h00 - 17h00).</p>
+        </div>
+        """, unsafe_allow_html=True)
 
 # ==========================================
 # TAB 3: MA TRẬN MAPPING & LỘ TRÌNH
@@ -484,24 +496,11 @@ with tab_faq:
     st.subheader("❓ Các Câu Hỏi Thường Gặp Của Nhân Viên & Khách Hàng (Q&A)")
     with st.expander("Q1: Khách hàng muốn bán lại món cũ nhưng cửa hàng không phải HUB thì làm thế nào?"):
         st.write("👉 **Trả lời:** Cửa hàng thường không có chức năng tiếp nhận giao dịch Mua lại (PA3) hoặc Chuyển đổi một phần (PA2). Nhân viên hướng dẫn khách hàng đến Cửa hàng HUB gần nhất trong khung giờ từ 15h00 đến 17h00 để thực hiện.")
+    with st.expander("Q2: Hóa đơn cũ và Hóa đơn mới khác tên / khác Mã Khách Hàng có được đổi PA1/PA2 không?"):
+        st.write("👉 **Trả lời:** Theo quy định, Hóa đơn cũ và Hóa đơn mới **bắt buộc phải cùng 1 Mã Khách Hàng** thì mới được áp dụng tỷ lệ đổi theo chính sách cam kết.")
+    with st.expander("Q3: Lộ trình thanh toán T+2, T+7, T+120 được tính bắt đầu từ khi nào?"):
+        st.write("👉 **Trả lời:** Ngày T là ngày giao dịch được tiếp nhận và xác lập hoàn tất hồ sơ trên hệ thống tại Cửa hàng HUB.")
 
-# ==========================================
-# TAB 5: QUẢN LÝ DỮ LIỆU SUPABASE
-# ==========================================
-with tab_database:
-    st.subheader("🗄️ Quản Lý Dữ Liệu Giao Dịch Thu Đổi (Supabase)")
-    if supabase_client:
-        if st.button("🔄 Tải Dữ Liệu Từ Supabase"):
-            try:
-                response = supabase_client.table("giao_dich_thu_doi").select("*").order("created_at", desc=True).execute()
-                if response.data:
-                    st.dataframe(pd.DataFrame(response.data), use_container_width=True)
-                else:
-                    st.info("Chưa có giao dịch nào được lưu.")
-            except Exception as e:
-                st.error(f"❌ Lỗi truy vấn: {e}")
-    else:
-        st.warning("⚠️ Chưa kết nối Supabase. Vui lòng nhập Supabase URL và API Key ở góc trái ứng dụng!")
-
+# Footer
 st.markdown("---")
-st.markdown("<div style='text-align: center; color: #6c757d; font-size: 13px;'>© 2026 Phu Nhuan Jewelry Joint Stock Company (PNJ).</div>", unsafe_allow_html=True)
+st.markdown("<div style='text-align: center; color: #6c757d; font-size: 13px;'>© 2026 Phu Nhuan Jewelry Joint Stock Company (PNJ). Bản quyền thuộc về Khối Bán Lẻ & Vận Hành.</div>", unsafe_allow_html=True)
