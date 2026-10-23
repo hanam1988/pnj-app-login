@@ -37,11 +37,34 @@ if hasattr(st, "secrets"):
     sb_url = st.secrets.get("SUPABASE_URL", "")
     sb_key = st.secrets.get("SUPABASE_KEY", "")
 
-if HAS_SUPABASE_LIB and sb_url and sb_key:
+if not HAS_SUPABASE_LIB:
+    supabase_err_msg = "Chưa cài thư viện 'supabase' (chạy: pip install -U supabase)."
+elif not sb_url or not sb_key:
+    supabase_err_msg = "Không đọc được SUPABASE_URL / SUPABASE_KEY từ st.secrets (file phải nằm ở .streamlit/secrets.toml, cạnh thư mục chạy lệnh streamlit)."
+else:
     try:
         supabase_client = create_client(clean_supabase_url(sb_url), str(sb_key).strip())
     except Exception as e:
-        supabase_err_msg = str(e)
+        supabase_err_msg = (
+            f"{e} — nếu lỗi là 'Invalid API key' thì bản supabase-py đang cũ, "
+            "chưa hỗ trợ key dạng sb_publishable_... (chạy: pip install -U supabase)."
+        )
+
+# Dự phòng: ghi thẳng qua REST API khi supabase client không khởi tạo được
+def insert_via_rest(table: str, payload: dict):
+    import requests
+    resp = requests.post(
+        f"{clean_supabase_url(sb_url)}/rest/v1/{table}",
+        headers={
+            "apikey": str(sb_key).strip(),
+            "Content-Type": "application/json",
+            "Prefer": "return=minimal",
+        },
+        json=payload,
+        timeout=20,
+    )
+    if resp.status_code >= 300:
+        raise RuntimeError(f"HTTP {resp.status_code}: {resp.text}")
 
 # ==========================================
 # KHỞI TẠO SESSION STATE
@@ -460,7 +483,7 @@ with tab_calculator:
         # Nút Lưu Dữ Liệu vào Supabase (Hoàn toàn tự động ngầm)
         st.markdown("---")
         if st.button("💾 LƯU GIAO DỊCH VÀO SUPABASE", type="primary"):
-            if supabase_client:
+            if supabase_client or (sb_url and sb_key):
                 try:
                     record_data = {
                         "ma_cua_hang": store_code,
@@ -473,7 +496,10 @@ with tab_calculator:
                         "chi_tiet_cu": old_items_processed,
                         "chi_tiet_moi": new_items_processed
                     }
-                    res = supabase_client.table("giao_dich_thu_doi").insert(record_data).execute()
+                    if supabase_client:
+                        supabase_client.table("giao_dich_thu_doi").insert(record_data).execute()
+                    else:
+                        insert_via_rest("giao_dich_thu_doi", record_data)
                     st.success("🎉 Đã lưu thành công giao dịch vào CSDL Supabase!")
                 except Exception as err:
                     st.error(f"❌ Lỗi từ Supabase: {err}")
